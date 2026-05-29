@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>新签海报生成器 - 批量同步自适应版</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        @font-face {
+            font-family: 'JiangChengRound';
+            src: url('江城圆体-600W.ttf') format('truetype'),
+                 url('江城圆体 600W.ttf') format('truetype'); 
+            font-weight: 600; font-style: normal;
+        }
+
+        :root {
+            /* --- 海报变量 --- */
+            --theme-color: #ff4757; 
+            --poster-bg-color: #ffeff0;
+            --poster-bg-transparent: rgba(255, 239, 240, 0); 
+            --element-color: var(--theme-color);
+            --sub-tag-bg: var(--theme-color);
+            --box-bg: #fff8e1;          
+            --box-border: #ffcc80; 
+            --poster-text-dark: #4d0005; 
+            --title-text-color: #ffffff;
+            --poster-w: 1080px;
+            --header-h: 1200px; 
+
+            /* --- UI 变量 --- */
+            --ui-bg: #f0f2f5;
+            --ui-panel-bg: #ffffff;
+            --ui-border: #e1e4e8;
+            --ui-accent-color: #007bff;
+            --ui-text-main: #333333;
+            --ui-text-sub: #666666;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+            margin: 0; background-color: var(--ui-bg);
+            display: flex; height: 100vh; overflow: hidden; color: var(--ui-text-main);
+            user-select: none; 
+        }
+
+        .title-tint { filter: url(#color-filter); transition: none; }
+
+        /* --- 左侧控制台 --- */
+        .control-panel-container { width: 420px; background: var(--ui-panel-bg); border-right: 1px solid var(--ui-border); display: flex; flex-direction: column; flex-shrink: 0; z-index: 100; box-shadow: 5px 0 25px rgba(0,0,0,0.03); }
+        .control-panel-content { padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; height: 100%; }
+        
+        h2 { margin: 0; font-size: 18px; font-weight: 800; color: var(--ui-text-main); }
+        .label-title { font-size: 14px; font-weight: 700; color: var(--ui-text-main); margin-bottom: 10px; display: block; text-align: left; }
+        .label-sub { font-size: 12px; color: var(--ui-text-sub); margin-bottom: 5px; display: block; text-align: left; }
+
+        .color-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+        .color-dot { aspect-ratio: 1; border-radius: 8px; cursor: pointer; border: 3px solid transparent; transition: transform 0.2s; position: relative; }
+        .color-dot:hover { transform: translateY(-2px); }
+        .color-dot.active { border-color: var(--ui-text-main); transform: scale(0.9); }
+
+        .ui-btn { border: 1px solid #ddd; background: #fff; padding: 10px 5px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; color: #555; transition: all 0.2s; flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .ui-btn:hover { border-color: var(--ui-accent-color); color: var(--ui-accent-color); background: #f0f7ff; }
+        .ui-btn.primary { background: var(--ui-accent-color); color: #fff; border: none; font-size: 16px; padding: 15px; }
+        .ui-btn.active { background: var(--ui-accent-color); color: #fff; border-color: var(--ui-accent-color); }
+        .ui-btn.disabled { background: #cbd5e1 !important; color: #94a3b8 !important; cursor: not-allowed !important; pointer-events: none; opacity: 0.8; }
+
+        /* 单独下载海报的醒目按钮样式 */
+        .download-single-btn {
+            background: linear-gradient(135deg, var(--theme-color), #ff6b81);
+            color: #ffffff;
+            border: none;
+            font-size: 24px;
+            font-weight: bold;
+            padding: 16px 50px;
+            border-radius: 50px;
+            box-shadow: 0 8px 20px rgba(255, 71, 87, 0.25), 0 4px 6px rgba(0,0,0,0.05);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            letter-spacing: 1px;
+            font-family: inherit;
+        }
+        .download-single-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 25px rgba(255, 71, 87, 0.35), 0 6px 10px rgba(0,0,0,0.1);
+            filter: brightness(1.05);
+        }
+        .download-single-btn:active {
+            transform: translateY(1px);
+            box-shadow: 0 4px 10px rgba(255, 71, 87, 0.2);
+        }
+        .download-single-btn:disabled {
+            background: #cbd5e1;
+            box-shadow: none;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .upload-zone { background:#f8f9fa; padding:15px; border-radius:12px; text-align:center; cursor:pointer; border:2px dashed #ddd; transition: all 0.2s; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
+        .upload-zone:hover { border-color: var(--ui-accent-color); background: #f0f7ff; }
+        .upload-zone.drag-over { border-color: var(--ui-accent-color); background: #e6f7ff; transform: scale(1.02); }
+        .upload-icon { font-size: 24px; margin-bottom: 5px; color: var(--ui-accent-color); }
+        .upload-text { font-size: 12px; color: #666; opacity: 0.7; }
+        
+        .ui-slider { width: 100%; accent-color: var(--ui-accent-color); cursor: pointer; }
+        .mini-color-picker { width: 100%; height: 35px; border: 1px solid #ddd; border-radius: 6px; padding: 0 5px; box-sizing: border-box; cursor: pointer; background: #fff; display: flex; align-items: center; gap: 10px; font-size: 12px; color: #666; }
+        .panel-box { background:#f8f9fa; padding:15px; border-radius:8px; border:1px solid #e9ecef; }
+        .panel-box-blue { background:#f0f7ff; padding:15px; border-radius:8px; border:1px solid #bae6fd; }
+
+        /* 右侧主内容区 */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+            background: #eef2f6;
+        }
+
+        /* 顶部导航栏 */
+        .top-nav {
+            height: 56px;
+            background: #ffffff;
+            border-bottom: 1px solid var(--ui-border);
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 0 20px;
+            z-index: 90;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+            flex-shrink: 0;
+        }
+
+        /* 历史记录侧边栏 */
+        .history-sidebar {
+            position: absolute;
+            top: 57px; /* Nav height + border */
+            right: 0;
+            width: 320px;
+            height: calc(100% - 57px);
+            background: var(--ui-panel-bg);
+            border-left: 1px solid var(--ui-border);
+            box-shadow: -5px 0 25px rgba(0,0,0,0.05);
+            transform: translateX(100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+        }
+        .history-sidebar.open {
+            transform: translateX(0);
+        }
+        .history-header {
+            padding: 15px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border-bottom: 1px solid var(--ui-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .history-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .history-item {
+            display: flex;
+            gap: 12px;
+            padding: 10px;
+            border: 1px solid var(--ui-border);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #fff;
+        }
+        .history-item:hover {
+            border-color: var(--ui-accent-color);
+            background: #f0f7ff;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+        .history-thumb {
+            width: 64px;
+            height: 64px;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 1px solid #eee;
+            flex-shrink: 0;
+        }
+        .history-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .history-time {
+            font-size: 12px;
+            color: var(--ui-text-sub);
+            margin-bottom: 4px;
+            font-weight: 500;
+        }
+        .history-prompt {
+            font-size: 12px;
+            color: var(--ui-text-main);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            line-height: 1.4;
+        }
+
+        /* 预览区 */
+        .preview-area { 
+            flex: 1; overflow: auto; position: relative; 
+            padding: 40px; box-sizing: border-box;
+            display: flex; align-items: flex-start; justify-content: center;
+            background-image: radial-gradient(#d0d4d9 1px, transparent 1px); background-size: 24px 24px; 
+        }
+        
+        #zoom-wrapper { 
+            position: relative; 
+            transition: width 0.1s, height 0.1s;
+            flex-shrink: 0;
+        }
+        #posters-container {
+            position: absolute; left: 0; top: 0;
+            transform-origin: top left;
+            display: flex; gap: 80px; 
+            width: 3400px; 
+        }
+
+        .poster-wrapper { display: flex; flex-direction: column; gap: 30px; align-items: center; }
+
+        /* --- 海报样式 --- */
+        .poster { width: var(--poster-w); min-height: 1500px; background-color: var(--poster-bg-color); position: relative; display: flex; flex-direction: column; overflow: visible; box-shadow: 0 40px 120px rgba(0,0,0,0.15); }
+        .poster-logo { position: absolute; top: 0; left: 0; width: 269px; height: 92px; z-index: 50; }
+        .poster-logo img { width: 100%; height: 100%; display: block; object-fit: contain; object-position: left top; }
+        
+        .poster-header { width: 100%; height: var(--header-h); background: #e0e0e0; position: relative; flex-shrink: 0; overflow: hidden; background-size: cover; background-position: top center; background-repeat: no-repeat; }
+        .poster-header::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 200px; background: linear-gradient(to bottom, var(--poster-bg-transparent), var(--poster-bg-color)); pointer-events: none; z-index: 5; }
+        
+        .content-container { position: relative; z-index: 10; padding: 0 45px 80px 45px; margin-top: -100px; display: flex; flex-direction: column; gap: 45px; }
+        .card { position: relative; background: #fff; border-radius: 50px; box-shadow: 0 20px 60px rgba(0,0,0,0.05); overflow: hidden; }
+        .card-header-section, .card-bottom-section { background: transparent; }
+        
+        .card-decor { display: none; position: absolute; top: 2px; right: 36px; width: 202px; height: 110px; z-index: 1; pointer-events: none; }
+        .card-decor img { width: 100%; height: 100%; object-fit: contain; object-position: right top; }
+
+        .card-title-container { width: 100%; height: 120px; display: flex; justify-content: center; position: relative; z-index: 20; }
+        .title-bg-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; display: flex; justify-content: center; }
+        .title-bg-layer img { height: 100%; width: auto; max-width: 100%; object-fit: contain; }
+        
+        .title-text-span { position: relative; z-index: 2; color: var(--title-text-color); font-family: 'JiangChengRound', "Microsoft YaHei", sans-serif; font-size: 60px; font-weight: 600; letter-spacing: 4px; line-height: 115px; text-shadow: 0 2px 4px rgba(0,0,0,0.1); outline: none; }
+
+        .card-body { padding: 40px 60px 60px 60px; text-align: center; }
+        
+        .promo-text { font-size: 40px; line-height: 1.5; color: var(--poster-text-dark); font-weight: bold; margin-bottom: 50px; }
+        .rule-list { text-align: left; padding: 20px 40px 20px 30px; display: flex; flex-direction: column; gap: 24px; }
+        .rule-item { display: flex; gap: 20px; align-items: flex-start; font-size: 36px; color: var(--poster-text-dark); line-height: 1.6; }
+        .rule-num { width: 46px; height: 46px; background: var(--element-color); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: bold; flex-shrink: 0; margin-top: 5px; font-family: 'JiangChengRound', sans-serif; line-height: 46px; }
+
+        .benefit-box-wrapper { position: relative; margin-top: 40px; }
+        .benefit-tag-label { position: absolute; top: 0; left: 0; min-width: 183px; width: auto; height: 56px; background: var(--sub-tag-bg); color: #fff; font-size: 33px; font-weight: bold; display: inline-flex; justify-content: center; align-items: center; padding: 0 30px; border-radius: 30px 0 30px 0; z-index: 5; white-space: nowrap; }
+        .benefit-box { background: var(--box-bg); border: 4px solid var(--box-border); border-radius: 30px; padding: 80px 30px 40px 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; text-align: left; position: relative; }
+        .b-item { font-size: 40px; color: var(--poster-text-dark); display: flex; align-items: baseline; font-weight: 500; }
+        .b-highlight { color: var(--element-color); font-weight: bold; font-size: 40px; margin-right: 0px; font-family: 'JiangChengRound', sans-serif; white-space: nowrap; flex-shrink: 0; }
+
+        .bonus-box { background: var(--box-bg); border: 4px solid var(--box-border); border-radius: 30px; padding: 60px 40px 50px 40px; position: relative; margin-bottom: 40px; text-align: left; }
+        .bonus-box:last-child { margin-bottom: 0; }
+        
+        .bonus-tag { position: absolute; top: -2px; left: -2px; background: var(--sub-tag-bg); color: #fff; font-size: 32px; padding: 6px 25px; border-radius: 30px 0 30px 0; font-weight: bold; z-index: 5; }
+        .bonus-top-flex { display: flex; justify-content: space-between; align-items: center; padding-left: 10px; }
+        .bonus-price { font-size: 50px; color: #ff4757; font-weight: 800; margin-bottom: 10px; font-family: 'JiangChengRound', sans-serif; }
+        .bonus-desc { font-size: 36px; color: var(--poster-text-dark); font-weight: 600; line-height: 1.4; }
+        .bonus-icon-img { width: 210px; height: 210px; display: block; object-fit: contain; margin-right: 10px; margin-top: -10px; }
+
+        .bonus-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px 30px; margin-top: 10px; outline: none; }
+        .bonus-grid > div { font-size: 34px; color: var(--poster-text-dark); display: flex; align-items: flex-start; line-height: 1.3; white-space: normal; }
+        .bonus-grid > div:first-child { grid-column: 1 / -1; font-size: 42px; font-weight: 800; color: var(--poster-text-dark); padding-bottom: 8px; }
+
+        /* --- 左侧模式样式 --- */
+        body[data-layout="left"] .card { 
+            background: #fff !important; 
+            border-radius: 50px !important; 
+            box-shadow: 0 20px 60px rgba(0,0,0,0.05) !important; 
+            overflow: visible !important; 
+        }
+        
+        body[data-layout="left"] .card-header-section { 
+            height: auto !important; min-height: 140px; background: transparent !important; position: relative; z-index: 10; 
+        }
+        
+        body[data-layout="left"] .card-bottom-section { 
+            background: transparent !important; border-radius: 0; padding-bottom: 5px; margin-top: 0; position: relative; z-index: 10; 
+        }
+        
+        body[data-layout="left"] .card-title-container { justify-content: flex-start !important; padding-left: 50px !important; padding-top: 45px !important; height: auto !important; margin-bottom: 45px !important; }
+        body[data-layout="left"] .title-bg-layer { display: none !important; }
+        
+        body[data-layout="left"] .title-text-span { color: var(--poster-text-dark) !important; text-shadow: none !important; line-height: 1.1 !important; font-size: 60px !important; display: block; }
+        body[data-layout="left"] .title-text-span div { font-size: 34px !important; font-weight: normal; color: var(--poster-text-dark); opacity: 0.7; margin-top: 10px; }
+        
+        body[data-layout="left"] .card-body { padding: 0 50px 60px 50px !important; }
+        body[data-layout="left"] .promo-text { text-align: left !important; }
+        
+        /* 贴合右侧边缘逻辑 */
+        body[data-layout="left"] .card-decor { 
+            display: block !important; 
+            top: 0 !important;
+            right: 0 !important; 
+        }
+
+    </style>
+</head>
+<body data-layout="center">
+
+    <svg style="position: absolute; width: 0; height: 0; overflow: hidden;" aria-hidden="true">
+        <defs>
+            <filter id="color-filter" color-interpolation-filters="sRGB">
+                <feFlood flood-color="#ff4757" result="flood" id="svg-flood-color" />
+                <feComposite in="flood" in2="SourceAlpha" operator="in" result="colored" />
+            </filter>
+        </defs>
+    </svg>
+
+    <div class="control-panel-container">
+        <div class="control-panel-content">
+            <h2>新签海报生成器 (v66 Pro版)</h2>
+
+            <div class="panel-box-blue" style="margin-top: 0;">
+                <div class="label-title" style="color:var(--ui-accent-color);">1. 版式布局</div>
+                <div style="display:flex; gap:10px; margin-bottom: 10px;">
+                    <div style="flex:1;">
+                        <div class="label-sub">标题位置</div>
+                        <div style="display:flex; gap:5px;">
+                            <button class="ui-btn active" onclick="switchLayout('center', this)">居中</button>
+                            <button class="ui-btn" onclick="switchLayout('left', this)">左侧(支持副标题)</button>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <div class="label-sub">海报内容</div>
+                    <div style="display:flex; gap:5px;">
+                        <button class="ui-btn active" onclick="switchContent('node', this)">普通节点版</button>
+                        <button class="ui-btn" onclick="switchContent('bonus', this)">加码活动版</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel-box">
+                <div class="label-title">✨ AI 头图生成 (Gemini)</div>
+                <div class="label-sub">输入 Gemini API 密钥，后台自动使用默认描述词与垫图。</div>
+                <div style="display:flex; gap:5px; margin-bottom:10px;">
+                    <input type="password" id="api-key-input" placeholder="输入 Gemini API Key" style="flex:1; padding:8px; border:1px solid #ddd; border-radius:4px; font-size:12px;">
+                    <button class="ui-btn" onclick="saveApiKey()" style="flex:none; width:60px;">保存</button>
+                </div>
+                <textarea id="ai-prompt-input" placeholder="输入画面场景描述，例如：两个小精灵在森林里看书..." style="width:100%; height:60px; padding:8px; border:1px solid #ddd; border-radius:4px; margin-bottom:10px; resize:vertical; box-sizing:border-box; font-size:13px; font-family:inherit;"></textarea>
+                
+                <div style="display:flex; gap:10px; margin-bottom:10px;">
+                    <input type="text" id="ai-header-title" placeholder="头图标题 (例: 火花思维逻辑节)" style="flex:1; padding:8px; border:1px solid #ddd; border-radius:4px; font-size:13px;">
+                    <input type="text" id="ai-header-subtitle" placeholder="头图副标题 (例: 限时加码活动)" style="flex:1; padding:8px; border:1px solid #ddd; border-radius:4px; font-size:13px;">
+                </div>
+
+                <button id="ai-generate-btn" class="ui-btn" onclick="generateAiHeader()" style="width:100%; color:var(--ui-accent-color); border-color:var(--ui-accent-color);">
+                    🪄 智能优化并生成头图(含3D文字)
+                </button>
+                <div id="ai-status" style="font-size:12px; color:#666; margin-top:8px; display:none; line-height:1.4;"></div>
+            </div>
+
+            <div>
+                <div class="label-title">2. 顶部背景图</div>
+                <div class="upload-zone" id="header-drop-area" onclick="document.getElementById('header-upload').click()">
+                    <div class="upload-icon">🖼️</div>
+                    <div class="upload-text">点击上传 / 拖拽 / Ctrl+V</div>
+                    <input type="file" id="header-upload" hidden accept="image/*" onchange="handleHeaderFile(this.files[0])">
+                </div>
+                <img id="current-header-img" style="display:none;" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTA4MCIgaGVpZ2h0PSIxMjAwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiNlMGUwZTAiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9ImFyaWFsIiBmb250LXNpemU9IjUwIiBmaWxsPSIjYWFhYWFhIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7lpLTpg6jog4zmma/ljaDkvY0gMTIwMHB4PC90ZXh0Pjwvc3ZnPg==">
+            </div>
+
+            <div class="panel-box">
+                <div class="label-title">3. 视图与尺寸</div>
+                <div style="margin-bottom:15px;">
+                    <div class="label-sub">视图移动: 鼠标滑轮滚动 或 拖动底部/右侧系统滚动条</div>
+                    <input type="range" id="zoom-slider" class="ui-slider" min="10" max="100" value="30" oninput="setZoom(this.value)">
+                </div>
+                <div>
+                    <div style="display:flex; justify-content:space-between;"><span class="label-sub">顶部背景高度</span><span class="label-sub" id="header-h-text">1200px</span></div>
+                    <input type="range" id="header-h-slider" class="ui-slider" min="500" max="1500" value="1200" oninput="setHeaderHeight(this.value)">
+                </div>
+            </div>
+
+            <div>
+                <div class="label-title">4. 全局主题 (HSB智能配色)</div>
+                <div class="color-grid">
+                    <div class="color-dot active" style="background:#ff4757" onclick="applyGlobalTheme('#ff4757', this)"></div>
+                    <div class="color-dot" style="background:#FF9800" onclick="applyGlobalTheme('#FF9800', this)"></div>
+                    <div class="color-dot" style="background:#4CAF50" onclick="applyGlobalTheme('#4CAF50', this)"></div>
+                    <div class="color-dot" style="background:#2196F3" onclick="applyGlobalTheme('#2196F3', this)"></div>
+                    <div class="color-dot" style="background:#9C27B0" onclick="applyGlobalTheme('#9C27B0', this)"></div>
+                    <div class="color-dot" style="background:conic-gradient(from 180deg, red, yellow, lime, cyan, blue, magenta, red); overflow:hidden;">
+                        <input type="color" oninput="applyGlobalTheme(this.value, this.parentElement)" style="opacity:0; width:100%; height:100%; cursor:pointer;">
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <div class="label-title">5. 个性化微调</div>
+                <div style="display:flex; flex-direction:column; gap:10px; margin-bottom: 20px;">
+                    <div class="mini-color-picker" onclick="document.getElementById('bg-picker').click()">
+                        <div id="bg-preview" style="width:20px; height:20px; border-radius:4px; background:#ffeff0; border:1px solid #ddd;"></div>
+                        <span>海报大背景</span>
+                        <input type="color" id="bg-picker" hidden oninput="updateSingleColor('--poster-bg-color', this.value, 'bg-preview')">
+                    </div>
+                    <div class="mini-color-picker" onclick="document.getElementById('ele-picker').click()">
+                        <div id="ele-preview" style="width:20px; height:20px; border-radius:4px; background:#ff4757; border:1px solid #ddd;"></div>
+                        <span>重点色 & 标题色</span>
+                        <input type="color" id="ele-picker" hidden oninput="updateElementColor(this.value)">
+                    </div>
+                    <div class="mini-color-picker" onclick="document.getElementById('box-picker').click()">
+                        <div id="box-preview" style="width:20px; height:20px; border-radius:4px; background:#fff8e1; border:1px solid #ddd;"></div>
+                        <span>权益框底色</span>
+                        <input type="color" id="box-picker" hidden oninput="updateBoxBgColor(this.value)">
+                    </div>
+                </div>
+
+                <div class="label-sub">文案颜色</div>
+                <div style="display:flex; gap:10px;">
+                    <button class="ui-btn" style="color:#ff4757" onmousedown="event.preventDefault(); applyTextColor('#ff4757')">红</button>
+                    <button class="ui-btn" style="color:#333333" onmousedown="event.preventDefault(); applyTextColor('#333333')">黑</button>
+                    <button class="ui-btn" style="color:#4d0005" onmousedown="event.preventDefault(); applyTextColor('#4d0005')">红棕</button>
+                    <button class="ui-btn" style="color:#007bff" onmousedown="event.preventDefault(); applyTextColor('#007bff')">蓝</button>
+                    <div class="ui-btn" style="flex:0 0 40px;" onclick="document.getElementById('text-color-picker').click()">
+                        <span>🎨</span>
+                        <input type="color" id="text-color-picker" hidden oninput="applyTextColor(this.value)">
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:none;">
+                <div id="match-status"></div>
+                <img id="preview-decor-equity" src="权益-红色.png">
+                <input type="file" id="decor-equity-upload" onchange="handleDecorEquityFile(this.files[0])">
+                <img id="preview-decor-rule" src="规则-红色.png">
+                <input type="file" id="decor-rule-upload" onchange="handleDecorRuleFile(this.files[0])">
+            </div>
+
+            <div style="margin-top:auto; padding-top:20px;">
+                 <button id="download-btn-all" class="ui-btn primary" onclick="startDownloadAll()" style="width:100%; padding:15px;">
+                     ⬇️ 批量下载 (全3版)
+                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧主内容区（包含顶部导航栏、生成视图和侧边栏） -->
+    <div class="main-content">
+        <!-- 顶部导航栏 -->
+        <div class="top-nav">
+            <button class="ui-btn" onclick="toggleHistory()" style="flex: none; padding: 8px 15px;">🕒 历史记录</button>
+        </div>
+
+        <!-- 画布预览区域 -->
+        <div class="preview-area" id="preview-area">
+            <div id="zoom-wrapper">
+                <div id="posters-container">
+                    
+                    <div class="poster-wrapper">
+                        <div class="poster" id="poster-1">
+                            <div class="poster-logo"><img class="poster-logo-display" src="logo.png" onerror="this.src=document.getElementById('base-logo-data').src" alt="Logo"></div>
+                            <div class="poster-header" style="background-image: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTA4MCIgaGVpZ2h0PSIxMjAwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiNlMGUwZTAiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9ImFyaWFsIiBmb250LXNpemU9IjUwIiBmaWxsPSIjYWFhYWFhIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7lpLTpg6jog4zmma/ljaDkvY0gMTIwMHB4PC90ZXh0Pjwvc3ZnPg==');"></div>
+                            <div class="content-container">
+                                <div class="card">
+                                    <div class="card-decor"><img src="权益-红色.png" class="decor-img-equity" onerror="this.style.display='none'"></div>
+                                    <div class="card-header-section">
+                                        <div class="card-title-container">
+                                            <div class="title-bg-layer"><img src="title-bg-red.png" class="title-tint" onerror="this.src=document.getElementById('base-title-bg-red').src"></div>
+                                            <div class="title-text-span" contenteditable="true">优惠权益</div>
+                                        </div>
+                                    </div>
+                                    <div class="card-bottom-section">
+                                        <div class="card-body">
+                                            <div class="content-node">
+                                                <div class="promo-text" contenteditable="true">下单购买火花逻辑思维48课包（直播课）<br>试听完课48小时内下单额额外赠送</div>
+                                                <div class="benefit-box-wrapper">
+                                                    <div class="benefit-tag-label" contenteditable="true">轻课100节</div>
+                                                    <div class="benefit-box" contenteditable="true">
+                                                        <div class="b-item"><span class="b-highlight">30节</span>益智动手魔方课</div>
+                                                        <div class="b-item"><span class="b-highlight">10节</span>听故事学成语</div>
+                                                        <div class="b-item"><span class="b-highlight">8节</span>火花小侦探推理</div>
+                                                        <div class="b-item"><span class="b-highlight">12节</span>数独趣味课</div>
+                                                        <div class="b-item"><span class="b-highlight">30节</span>一分钟读懂心理</div>
+                                                        <div class="b-item"><span class="b-highlight">10节</span>古诗走着学</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="content-bonus" style="display:none;">
+                                                <div class="bonus-box">
+                                                    <div class="bonus-tag" contenteditable="true">送</div>
+                                                    <div class="bonus-top-flex">
+                                                        <div>
+                                                            <div class="bonus-price" contenteditable="true">价值500元</div>
+                                                            <div class="bonus-desc" contenteditable="true">赠送25000火花币<br>可兑换5节课</div>
+                                                        </div>
+                                                        <img src="火花币.png" class="bonus-icon-img" onerror="this.style.display='none'">
+                                                    </div>
+                                                </div>
+                                                <div class="bonus-box">
+                                                    <div class="bonus-tag" contenteditable="true">送</div>
+                                                    <div class="bonus-grid" contenteditable="true">
+                                                        <div>轻课100节（这条为重要信息）</div>
+                                                        <div>30节益智动手魔方课</div>
+                                                        <div>10节听故事学成语</div>
+                                                        <div>12节数独趣味课</div>
+                                                        <div>8节火花小侦探之逻辑推理</div>
+                                                        <div>10节古诗走着学</div>
+                                                        <div>30节一分钟读懂孩子心理</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="card">
+                                    <div class="card-decor"><img src="规则-红色.png" class="decor-img-rule" onerror="this.style.display='none'"></div>
+                                    <div class="card-header-section">
+                                        <div class="card-title-container">
+                                            <div class="title-bg-layer"><img src="title-bg-red.png" class="title-tint" onerror="this.src=document.getElementById('base-title-bg-red').src"></div>
+                                            <div class="title-text-span" contenteditable="true">活动规则</div>
+                                        </div>
+                                    </div>
+                                    <div class="card-bottom-section">
+                                        <div class="card-body">
+                                            <div class="rules-node rule-list" contenteditable="true">
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">1</div><div>该活动仅限官网下单购买48课包，付费时间在活动期间的用户；</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">2</div><div>火花币与拓展课充值时间不晚于2026年6月10日；</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">3</div><div>课程如退费，课程需扣费，赠送的活动权益需扣除；</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">4</div><div>活动详情可咨询对应课程顾问。</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">5</div><div>活动详情可咨询对应课程顾问。</div></div>
+                                            </div>
+                                            <div class="rules-bonus rule-list" contenteditable="true" style="display:none;">
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">1</div><div>该活动仅限官网下单购买48课包，付费时间2026年5月9日00:00 至5月11日 23:59的用户；</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">2</div><div>火花币与拓展课2026年6月10日前充值到账；</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">3</div><div>课程如退费，课程需扣费，赠送的活动权益需扣除；</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">4</div><div>活动详情可咨询您的课程顾问。</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">5</div><div>活动详情可咨询您的课程顾问。</div></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 20px; text-align: center;">
+                            <button class="download-single-btn" id="download-btn-1" onclick="downloadSingle(1, '48课包')">⬇️ 单独下载 48课包版</button>
+                        </div>
+                    </div>
+
+                    <div class="poster-wrapper">
+                        <div class="poster" id="poster-2">
+                            <div class="poster-logo"><img class="poster-logo-display" src="logo.png" onerror="this.src=document.getElementById('base-logo-data').src" alt="Logo"></div>
+                            <div class="poster-header" style="background-image: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTA4MCIgaGVpZ2h0PSIxMjAwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiNlMGUwZTAiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9ImFyaWFsIiBmb250LXNpemU9IjUwIiBmaWxsPSIjYWFhYWFhIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7lpLTpg6jog4zmma/ljaDkvY0gMTIwMHB4PC90ZXh0Pjwvc3ZnPg==');"></div>
+                            <div class="content-container">
+                                <div class="card">
+                                    <div class="card-decor"><img src="权益-红色.png" class="decor-img-equity" onerror="this.style.display='none'"></div>
+                                    <div class="card-header-section">
+                                        <div class="card-title-container">
+                                            <div class="title-bg-layer"><img src="title-bg-red.png" class="title-tint" onerror="this.src=document.getElementById('base-title-bg-red').src"></div>
+                                            <div class="title-text-span" contenteditable="true">优惠权益</div>
+                                        </div>
+                                    </div>
+                                    <div class="card-bottom-section">
+                                        <div class="card-body">
+                                            <div class="content-node">
+                                                <div class="promo-text" contenteditable="true">下单购买火花逻辑思维42课包（直播课）<br>试听完课48小时内下单额额外赠送</div>
+                                                <div class="benefit-box-wrapper">
+                                                    <div class="benefit-tag-label" contenteditable="true">轻课100节</div>
+                                                    <div class="benefit-box" contenteditable="true">
+                                                        <div class="b-item"><span class="b-highlight">30节</span>益智动手魔方课</div>
+                                                        <div class="b-item"><span class="b-highlight">10节</span>听故事学成语</div>
+                                                        <div class="b-item"><span class="b-highlight">8节</span>火花小侦探推理</div>
+                                                        <div class="b-item"><span class="b-highlight">12节</span>数独趣味课</div>
+                                                        <div class="b-item"><span class="b-highlight">30节</span>一分钟读懂心理</div>
+                                                        <div class="b-item"><span class="b-highlight">10节</span>古诗走着学</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="content-bonus" style="display:none;">
+                                                <div class="bonus-box">
+                                                    <div class="bonus-tag" contenteditable="true">送</div>
+                                                    <div class="bonus-top-flex">
+                                                        <div>
+                                                            <div class="bonus-price" contenteditable="true">价值400元</div>
+                                                            <div class="bonus-desc" contenteditable="true">赠送20000火花币<br>可兑换4节课</div>
+                                                        </div>
+                                                        <img src="火花币.png" class="bonus-icon-img" onerror="this.style.display='none'">
+                                                    </div>
+                                                </div>
+                                                <div class="bonus-box">
+                                                    <div class="bonus-tag" contenteditable="true">送</div>
+                                                    <div class="bonus-grid" contenteditable="true">
+                                                        <div>轻课100节（这条为重要信息）</div>
+                                                        <div>30节益智动手魔方课</div>
+                                                        <div>10节听故事学成语</div>
+                                                        <div>12节数独趣味课</div>
+                                                        <div>8节火花小侦探之逻辑推理</div>
+                                                        <div>10节古诗走着学</div>
+                                                        <div>30节一分钟读懂孩子心理</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="card">
+                                    <div class="card-decor"><img src="规则-红色.png" class="decor-img-rule" onerror="this.style.display='none'"></div>
+                                    <div class="card-header-section">
+                                        <div class="card-title-container">
+                                            <div class="title-bg-layer"><img src="title-bg-red.png" class="title-tint" onerror="this.src=document.getElementById('base-title-bg-red').src"></div>
+                                            <div class="title-text-span" contenteditable="true">活动规则</div>
+                                        </div>
+                                    </div>
+                                    <div class="card-bottom-section">
+                                        <div class="card-body">
+                                            <div class="rules-node rule-list" contenteditable="true">
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">1</div><div>该活动仅限官网下单购买42课包，付费时间在活动期间的用户；</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">2</div><div>火花币与拓展课充值时间不晚于2026年6月10日；</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">3</div><div>课程如退费，课程需扣费，赠送的活动权益需扣除；</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">4</div><div>活动详情可咨询对应课程顾问。</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">5</div><div>活动详情可咨询对应课程顾问。</div></div>
+                                            </div>
+                                            <div class="rules-bonus rule-list" contenteditable="true" style="display:none;">
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">1</div><div>该活动仅限官网下单购买42课包，付费时间2026年5月9日00:00 至5月11日 23:59的用户；</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">2</div><div>火花币与拓展课2026年6月10日前充值到账；</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">3</div><div>课程如退费，课程需扣费，赠送的活动权益需扣除；</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">4</div><div>活动详情可咨询您的课程顾问。</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">5</div><div>活动详情可咨询您的课程顾问。</div></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 20px; text-align: center;">
+                            <button class="download-single-btn" id="download-btn-2" onclick="downloadSingle(2, '42课包')">⬇️ 单独下载 42课包版</button>
+                        </div>
+                    </div>
+
+                    <div class="poster-wrapper">
+                        <div class="poster" id="poster-3">
+                            <div class="poster-logo"><img class="poster-logo-display" src="logo.png" onerror="this.src=document.getElementById('base-logo-data').src" alt="Logo"></div>
+                            <div class="poster-header" style="background-image: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTA4MCIgaGVpZ2h0PSIxMjAwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiNlMGUwZTAiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9ImFyaWFsIiBmb250LXNpemU9IjUwIiBmaWxsPSIjYWFhYWFhIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7lpLTpg6jog4zmma/ljaDkvY0gMTIwMHB4PC90ZXh0Pjwvc3ZnPg==');"></div>
+                            <div class="content-container">
+                                <div class="card">
+                                    <div class="card-decor"><img src="权益-红色.png" class="decor-img-equity" onerror="this.style.display='none'"></div>
+                                    <div class="card-header-section">
+                                        <div class="card-title-container">
+                                            <div class="title-bg-layer"><img src="title-bg-red.png" class="title-tint" onerror="this.src=document.getElementById('base-title-bg-red').src"></div>
+                                            <div class="title-text-span" contenteditable="true">优惠权益</div>
+                                        </div>
+                                    </div>
+                                    <div class="card-bottom-section">
+                                        <div class="card-body">
+                                            <div class="content-node">
+                                                <div class="promo-text" contenteditable="true">下单购买火花逻辑思维30课包（直播课）<br>试听完课48小时内下单额额外赠送</div>
+                                                <div class="benefit-box-wrapper">
+                                                    <div class="benefit-tag-label" contenteditable="true">轻课100节</div>
+                                                    <div class="benefit-box" contenteditable="true">
+                                                        <div class="b-item"><span class="b-highlight">30节</span>益智动手魔方课</div>
+                                                        <div class="b-item"><span class="b-highlight">10节</span>听故事学成语</div>
+                                                        <div class="b-item"><span class="b-highlight">8节</span>火花小侦探推理</div>
+                                                        <div class="b-item"><span class="b-highlight">12节</span>数独趣味课</div>
+                                                        <div class="b-item"><span class="b-highlight">30节</span>一分钟读懂心理</div>
+                                                        <div class="b-item"><span class="b-highlight">10节</span>古诗走着学</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="content-bonus" style="display:none;">
+                                                <div class="bonus-box">
+                                                    <div class="bonus-tag" contenteditable="true">送</div>
+                                                    <div class="bonus-top-flex">
+                                                        <div>
+                                                            <div class="bonus-price" contenteditable="true">价值300元</div>
+                                                            <div class="bonus-desc" contenteditable="true">赠送15000火花币<br>可兑换3节课</div>
+                                                        </div>
+                                                        <img src="火花币.png" class="bonus-icon-img" onerror="this.style.display='none'">
+                                                    </div>
+                                                </div>
+                                                <div class="bonus-box">
+                                                    <div class="bonus-tag" contenteditable="true">送</div>
+                                                    <div class="bonus-grid" contenteditable="true">
+                                                        <div>轻课100节（这条为重要信息）</div>
+                                                        <div>30节益智动手魔方课</div>
+                                                        <div>10节听故事学成语</div>
+                                                        <div>12节数独趣味课</div>
+                                                        <div>8节火花小侦探之逻辑推理</div>
+                                                        <div>10节古诗走着学</div>
+                                                        <div>30节一分钟读懂孩子心理</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="card">
+                                    <div class="card-decor"><img src="规则-红色.png" class="decor-img-rule" onerror="this.style.display='none'"></div>
+                                    <div class="card-header-section">
+                                        <div class="card-title-container">
+                                            <div class="title-bg-layer"><img src="title-bg-red.png" class="title-tint" onerror="this.src=document.getElementById('base-title-bg-red').src"></div>
+                                            <div class="title-text-span" contenteditable="true">活动规则</div>
+                                        </div>
+                                    </div>
+                                    <div class="card-bottom-section">
+                                        <div class="card-body">
+                                            <div class="rules-node rule-list" contenteditable="true">
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">1</div><div>该活动仅限官网下单购买30课包，付费时间在活动期间的用户；</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">2</div><div>火花币与拓展课充值时间不晚于2026年6月10日；</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">3</div><div>课程如退费，课程需扣费，赠送的活动权益需扣除；</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">4</div><div>活动详情可咨询对应课程顾问。</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">5</div><div>活动详情可咨询对应课程顾问。</div></div>
+                                            </div>
+                                            <div class="rules-bonus rule-list" contenteditable="true" style="display:none;">
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">1</div><div>该活动仅限官网下单购买30课包，付费时间2026年5月9日00:00 至5月11日 23:59的用户；</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">2</div><div>火花币与拓展课2026年6月10日前充值到账；</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">3</div><div>课程如退费，课程需扣费，赠送的活动权益需扣除；</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">4</div><div>活动详情可咨询您的课程顾问。</div></div>
+                                                <div class="rule-item"><div class="rule-num" contenteditable="false">5</div><div>活动详情可咨询您的课程顾问。</div></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 20px; text-align: center;">
+                            <button class="download-single-btn" id="download-btn-3" onclick="downloadSingle(3, '30课包')">⬇️ 单独下载 30课包版</button>
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+        </div>
+
+        <!-- 侧边栏：生图历史记录 -->
+        <div id="history-sidebar" class="history-sidebar">
+            <div class="history-header">
+                生图历史记录 
+                <span onclick="toggleHistory()" style="cursor:pointer; color:#999; font-size:18px;">&times;</span>
+            </div>
+            <div class="history-list" id="history-list">
+                <div style="text-align:center; padding:20px; color:#999; font-size:13px;">暂无生成记录</div>
+            </div>
+        </div>
+    </div>
+    
+    <div style="display:none;">
+        <img id="base-logo-data" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNjkgOTIiPjx0ZXh0IHg9IjEwIiB5PSI1MCIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiIGZpbGw9IiM2NjYiPuaXoExvZ288L3RleHQ+PC9zdmc+">
+        <img id="base-title-bg-red" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZAAAABkCAYAAAC142GAAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAZdEVYdFNvZnR3YXJlAHBhaW50Lm5ldCA0LjAuMTZEaa/1AAAD0klEQVR4Xu3VMQ0AAAjDMO5f80jg4wQkpLqZ2d05AgQIECAwFwjI/==">
+        <img id="base-text-ref" src="text.png" onerror="console.warn('text.png not found, please ensure it exists in the root directory.')">
+    </div>
+
+    <div id="cloned-poster-container" style="position:fixed; top:0; left:0; z-index:-9999; opacity:0; pointer-events:none; width:1080px;"></div>
+
+    <script>
+        function tintImageToBase64(imgElement, hexColor) {
+            const canvas = document.createElement('canvas');
+            canvas.width = imgElement.naturalWidth || imgElement.width || 200;
+            canvas.height = imgElement.naturalHeight || imgElement.height || 50;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(imgElement, 0, 0, canvas.width, canvas.height);
+            ctx.globalCompositeOperation = 'source-in';
+            ctx.fillStyle = hexColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            return canvas.toDataURL('image/png');
+        }
+        
+        function hexToHsb(hex) {
+            let r = parseInt(hex.substring(1, 3), 16) / 255, g = parseInt(hex.substring(3, 5), 16) / 255, b = parseInt(hex.substring(5, 7), 16) / 255;
+            let max = Math.max(r, g, b), min = Math.min(r, g, b), h, s, v = max, d = max - min;
+            s = max === 0 ? 0 : d / max;
+            if (max === min) h = 0; 
+            else {
+                switch (max) { case r: h = (g - b) / d + (g < b ? 6 : 0); break; case g: h = (b - r) / d + 2; break; case b: h = (r - g) / d + 4; break; }
+                h /= 6;
+            }
+            return { h: h * 360, s: s * 100, b: v * 100 };
+        }
+
+        function hsbToHex(h, s, b) {
+            s /= 100; b /= 100; let k = (n) => (n + h / 60) % 6; let f = (n) => b * (1 - s * Math.max(0, Math.min(k(n), 4 - k(n), 1)));
+            let toHex = (x) => { let hex = Math.round(x * 255).toString(16); return hex.length === 1 ? '0' + hex : hex; };
+            return `#${toHex(f(5))}${toHex(f(3))}${toHex(f(1))}`;
+        }
+
+        function hexToHSL(hex) { let r=0,g=0,b=0;if(hex.length==4){r="0x"+hex[1]+hex[1];g="0x"+hex[2]+hex[2];b="0x"+hex[3]+hex[3];}else if(hex.length==7){r="0x"+hex[1]+hex[2];g="0x"+hex[3]+hex[4];b="0x"+hex[5]+hex[6];}r/=255;g/=255;b/=255;let cmin=Math.min(r,g,b),cmax=Math.max(r,g,b),delta=cmax-cmin;let h=0;if(delta==0)h=0;else if(cmax==r)h=((g-b)/delta)%6;else if(cmax==g)h=(b-r)/delta+2;else h=(r-g)/delta+4;h=Math.round(h*60);if(h<0)h+=360;return h;}
+
+        function hexToRgba0(hex) {
+            let r = parseInt(hex.substring(1, 3), 16), g = parseInt(hex.substring(3, 5), 16), b = parseInt(hex.substring(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, 0)`;
+        }
+
+        function hslToHex(h, s, l) {
+            l /= 100; const a = s * Math.min(l, 1 - l) / 100;
+            const f = n => { const k = (n + h / 30) % 12; const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1); return Math.round(255 * color).toString(16).padStart(2, '0'); };
+            return `#${f(0)}${f(8)}${f(4)}`;
+        }
+
+        function switchLayout(mode, btn) {
+            document.body.setAttribute('data-layout', mode);
+            const btns = btn.parentElement.parentElement.querySelectorAll('.ui-btn');
+            btns.forEach(b => b.classList.remove('active')); btn.classList.add('active');
+            setTimeout(updateTransform, 50);
+        }
+
+        function switchContent(type, btn) {
+            document.querySelectorAll('.content-node').forEach(el => el.style.display = type === 'node' ? 'block' : 'none');
+            document.querySelectorAll('.content-bonus').forEach(el => el.style.display = type === 'bonus' ? 'block' : 'none');
+            document.querySelectorAll('.rules-node').forEach(el => el.style.display = type === 'node' ? 'flex' : 'none');
+            document.querySelectorAll('.rules-bonus').forEach(el => el.style.display = type === 'bonus' ? 'flex' : 'none');
+            
+            const btns = btn.parentElement.querySelectorAll('.ui-btn');
+            btns.forEach(b => b.classList.remove('active')); btn.classList.add('active');
+            setTimeout(updateTransform, 50);
+        }
+
+        let currentZoom = 0.30;
+        function initView() {
+            updateTransform();
+            const resizeObserver = new ResizeObserver(() => { updateTransform(); });
+            resizeObserver.observe(document.getElementById('posters-container'));
+        }
+
+        function updateTransform() {
+            const container = document.getElementById('posters-container');
+            container.style.transform = `scale(${currentZoom})`;
+            document.getElementById('zoom-slider').value = Math.round(currentZoom * 100);
+            
+            const wrapper = document.getElementById('zoom-wrapper');
+            wrapper.style.width = `${3400 * currentZoom}px`;
+            const dynamicHeight = container.offsetHeight > 1500 ? container.offsetHeight : 1500;
+            wrapper.style.height = `${dynamicHeight * currentZoom}px`;
+        }
+
+        function setZoom(val) { currentZoom = val / 100; updateTransform(); }
+
+        function setHeaderHeight(val) {
+            document.documentElement.style.setProperty('--header-h', val + 'px');
+            document.getElementById('header-h-text').innerText = val + 'px';
+            document.getElementById('header-h-slider').value = val;
+            setTimeout(updateTransform, 50);
+        }
+
+        function matchDecorByHue(hue) {
+            let colorName = '红色', equityExt = '.png', ruleExt = '.png';
+            if ((hue >= 0 && hue < 25) || (hue >= 335 && hue <= 360)) colorName = '红色';
+            else if (hue >= 25 && hue < 65) colorName = '黄色';
+            else if (hue >= 65 && hue < 175) colorName = '绿色';
+            else if (hue >= 175 && hue < 255) colorName = '蓝色';
+            else if (hue >= 255 && hue < 335) colorName = '紫色'; 
+            return { name: colorName, equitySrc: `权益-${colorName}${equityExt}`, ruleSrc: `规则-${colorName}${ruleExt}` };
+        }
+
+        function applyGlobalTheme(hex, el) {
+            document.documentElement.style.setProperty('--theme-color', hex);
+            const h = hexToHSL(hex);
+            const paleColorHex = hslToHex(h, 100, 96);
+            updateSingleColor('--poster-bg-color', paleColorHex, 'bg-preview');
+            document.getElementById('bg-picker').value = "#ffffff"; 
+            updateBoxBgColor(paleColorHex);
+            const brightColor = `hsl(${h}, 100%, 75%)`;
+            updateBoxBorderColor(brightColor);
+            updateElementColor(hex);
+            const hsb = hexToHsb(hex);
+            const darkColorHex = hsbToHex(hsb.h, 100, 30);
+            document.documentElement.style.setProperty('--poster-text-dark', darkColorHex);
+
+            const match = matchDecorByHue(hsb.h);
+            document.getElementById('match-status').innerText = `自动匹配: ${match.name}系`;
+            
+            document.querySelectorAll('.decor-img-equity').forEach(img => { img.src = match.equitySrc; img.style.display = 'block'; });
+            document.querySelectorAll('.decor-img-rule').forEach(img => { img.src = match.ruleSrc; img.style.display = 'block'; });
+            
+            document.getElementById('preview-decor-equity').src = match.equitySrc;
+            document.getElementById('preview-decor-rule').src = match.ruleSrc;
+
+            if(el) { document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active')); el.classList.add('active'); }
+        }
+        
+        function updateElementColor(hex) {
+            document.documentElement.style.setProperty('--element-color', hex); document.documentElement.style.setProperty('--sub-tag-bg', hex);
+            document.getElementById('ele-preview').style.backgroundColor = hex; document.getElementById('ele-picker').value = hex;
+            document.getElementById('svg-flood-color').setAttribute('flood-color', hex);
+        }
+        
+        function updateSingleColor(varName, hex, previewId) { 
+            document.documentElement.style.setProperty(varName, hex); 
+            if(varName === '--poster-bg-color') { if(hex.startsWith('#')) document.documentElement.style.setProperty('--poster-bg-transparent', hexToRgba0(hex)); }
+            if(previewId) document.getElementById(previewId).style.backgroundColor = hex; 
+        }
+        function updateBoxBgColor(hex) { document.documentElement.style.setProperty('--box-bg', hex); document.getElementById('box-preview').style.backgroundColor = hex; document.getElementById('box-picker').value = hex; }
+        function updateBoxBorderColor(hex) { document.documentElement.style.setProperty('--box-border', hex); }
+        function applyTextColor(color) { document.execCommand('styleWithCSS', false, true); document.execCommand('foreColor', false, color); }
+
+        function handleHeaderFile(file) { 
+            if(file) { const reader = new FileReader(); reader.onload = (e) => { document.getElementById('current-header-img').src = e.target.result; document.querySelectorAll('.poster-header').forEach(el => el.style.backgroundImage = `url('${e.target.result}')`); }; reader.readAsDataURL(file); }
+        }
+        function handleDecorEquityFile(file) { 
+            if(file) { const reader = new FileReader(); reader.onload = (e) => { document.querySelectorAll('.decor-img-equity').forEach(img => img.src = e.target.result); document.getElementById('preview-decor-equity').src = e.target.result; }; reader.readAsDataURL(file); }
+        }
+        function handleDecorRuleFile(file) { 
+            if(file) { const reader = new FileReader(); reader.onload = (e) => { document.querySelectorAll('.decor-img-rule').forEach(img => img.src = e.target.result); document.getElementById('preview-decor-rule').src = e.target.result; }; reader.readAsDataURL(file); }
+        }
+
+        function setupHeaderDrag() {
+            const el = document.getElementById('header-drop-area');
+            el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); });
+            el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+            el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('drag-over'); handleHeaderFile(e.dataTransfer.files[0]); });
+        }
+
+        document.addEventListener('paste', e => {
+            const bonusGrid = e.target.closest('.bonus-grid');
+            if (bonusGrid) {
+                e.preventDefault();
+                let text = (e.clipboardData || window.clipboardData).getData('text/plain');
+                let lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+                if (lines.length > 0) {
+                    bonusGrid.innerHTML = lines.map(line => `<div>${line}</div>`).join('');
+                    bonusGrid.dispatchEvent(new Event('input', { bubbles: true })); 
+                }
+                return;
+            }
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (let index in items) { 
+                const item = items[index]; 
+                if (item.kind === 'file' && item.type.startsWith('image/')) handleHeaderFile(item.getAsFile()); 
+            }
+        });
+
+        function setupSync() {
+            const poster1 = document.getElementById('poster-1');
+            poster1.addEventListener('input', (e) => {
+                const bonusGrid = e.target.closest('.bonus-grid');
+                if (bonusGrid) {
+                    const html = bonusGrid.innerHTML;
+                    document.querySelector('#poster-2 .bonus-grid').innerHTML = html;
+                    document.querySelector('#poster-3 .bonus-grid').innerHTML = html;
+                }
+                const benefitBox = e.target.closest('.benefit-box');
+                if (benefitBox) {
+                    const html = benefitBox.innerHTML;
+                    document.querySelector('#poster-2 .benefit-box').innerHTML = html;
+                    document.querySelector('#poster-3 .benefit-box').innerHTML = html;
+                }
+
+                const ruleList = e.target.closest('.rule-list');
+                if (ruleList) {
+                    const isNode = ruleList.classList.contains('rules-node');
+                    const selector = isNode ? '.rules-node' : '.rules-bonus';
+                    const baseHtml = ruleList.innerHTML;
+                    
+                    let html2 = baseHtml, html3 = baseHtml;
+                    if (baseHtml.includes('48')) {
+                        html2 = baseHtml.replace(/48/g, '42'); html3 = baseHtml.replace(/48/g, '30');
+                    }
+                    document.querySelector('#poster-2 ' + selector).innerHTML = html2;
+                    document.querySelector('#poster-3 ' + selector).innerHTML = html3;
+                }
+            });
+        }
+
+        // ================= 历史记录逻辑 =================
+        let historyRecords = [];
+        const MAX_HISTORY = 50;
+
+        function toggleHistory() {
+            document.getElementById('history-sidebar').classList.toggle('open');
+        }
+
+        function saveToHistory(imgSrc, prompt, title, subtitle) {
+            const record = {
+                id: Date.now(),
+                imgSrc,
+                prompt,
+                title,
+                subtitle,
+                time: new Date().toLocaleTimeString()
+            };
+            historyRecords.unshift(record);
+            if (historyRecords.length > MAX_HISTORY) {
+                historyRecords.pop();
+            }
+            renderHistory();
+        }
+
+        function renderHistory() {
+            const list = document.getElementById('history-list');
+            if (historyRecords.length === 0) {
+                list.innerHTML = `<div style="text-align:center; padding:20px; color:#999; font-size:13px;">暂无生成记录</div>`;
+                return;
+            }
+            list.innerHTML = historyRecords.map((r, index) => `
+                <div class="history-item" onclick="restoreHistory(${index})">
+                    <img src="${r.imgSrc}" class="history-thumb">
+                    <div class="history-info">
+                        <div class="history-time">${r.time}</div>
+                        <div class="history-prompt" title="${r.prompt}">${r.prompt}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function restoreHistory(index) {
+            const r = historyRecords[index];
+            document.getElementById('current-header-img').src = r.imgSrc;
+            document.querySelectorAll('.poster-header').forEach(el => {
+                el.style.backgroundImage = `url('${r.imgSrc}')`;
+            });
+            if(r.title) document.getElementById('ai-header-title').value = r.title;
+            if(r.subtitle) document.getElementById('ai-header-subtitle').value = r.subtitle;
+            document.getElementById('ai-prompt-input').value = r.prompt;
+            alert('已切换至历史主视觉！');
+        }
+
+        // ================= AI 头图生成工作流 (对接 Gemini REST API) =================
+        
+        function saveApiKey() {
+            const key = document.getElementById('api-key-input').value.trim();
+            if(!key) return alert('API Key 不能为空！');
+            localStorage.setItem('gemini_api_key', key);
+            alert('API Key 已安全保存至本地浏览器！');
+        }
+
+        // 辅助方法：读取本地垫图转Base64
+        async function getLocalImageBase64(url) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Network response was not ok');
+                const blob = await response.blob();
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        const base64data = reader.result.split(',')[1];
+                        resolve({ mimeType: blob.type || 'image/png', data: base64data });
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+            } catch (e) {
+                console.warn("未能找到本地参考图 " + url + "，将仅使用纯文本进行生成。错误:", e);
+                return null;
+            }
+        }
+
+        async function generateAiHeader() {
+            const apiKey = localStorage.getItem('gemini_api_key');
+            if (!apiKey) return alert('请先输入并保存您的 Gemini API Key！');
+            const userInput = document.getElementById('ai-prompt-input').value.trim();
+            if (!userInput) return alert('请输入想要的头图画面场景描述！');
+
+            // 获取新增的标题和副标题
+            const headerTitle = document.getElementById('ai-header-title').value.trim();
+            const headerSubtitle = document.getElementById('ai-header-subtitle').value.trim();
+
+            const statusEl = document.getElementById('ai-status');
+            const btn = document.getElementById('ai-generate-btn');
+            btn.disabled = true; statusEl.style.display = 'block';
+
+            // 获取当前主视觉重点色
+            const themeColorHex = getComputedStyle(document.documentElement).getPropertyValue('--element-color').trim();
+
+            try {
+                // 第一步：调用 Gemini 3 Pro 预览版 仅对用户场景进行扩写优化
+                statusEl.innerHTML = '正在使用 Gemini 3 Pro 预览版 智能优化场景词... (1/2)';
+                
+                const geminiTextUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key=${apiKey}`;
+                
+                const promptInstruction = `你是一个专业的AI生图提示词工程师。请将以下用户的简单描述，扩写为细节丰富、可以直接用于生图的场景描述词。
+
+用户描述：${userInput}
+
+要求：
+1. 仅对场景进行扩写优化，必须要求有IP（主角）在场景中。
+2. 画面主体、光影、细节和构图要丰富统一。
+3. 直接返回优化后的文本即可，不需要任何其他的寒暄和解释。
+4.对ip服饰、动作、表情进行描述，适合在用户输入的场景环境中，积极向上`;
+                
+                const geminiRes = await fetch(geminiTextUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: promptInstruction }] }] })
+                });
+
+                if(!geminiRes.ok) throw new Error('提示词优化请求失败，请检查 API Key 是否有效。');
+                const geminiData = await geminiRes.json();
+                
+                let optimizedPrompt = userInput;
+                if (geminiData.candidates && geminiData.candidates[0]) {
+                    optimizedPrompt = geminiData.candidates[0].content.parts[0].text.trim();
+                }
+
+                // 第二步：结合优化词与两张参考图，添加明确的排版约束，调用生图
+                statusEl.innerHTML = '正在加载双参考图并生成头图(含3D文字)，这可能需要几十秒... (2/2)';
+                
+                const defaultStyle = "3D 卡通梦幻童趣风格（低多边形 / 软萌 Q 版），带有强烈的儿童向、童话色彩，是典型的 “Cute 3D Illustration”（可爱三维插画），常见于儿童绘本、早教 APP、动画 IP 场景设计";
+                const finalPrompt = `风格要求：${defaultStyle}
+具体画面场景：${optimizedPrompt}
+主角要求：画面主角必须是参考图 ip.png 中的 IP。注意ip的脑袋稍微方一点，特别注意：ip每个手只有4根手指，与参考图一致。
+文字与排版要求：画面中场景的上方位置需包含大标题： ${headerTitle || ''} 和副标题： ${headerSubtitle || ''}。顶部预留一点干净简洁的空间，文字样式需严格学习参考图 text.png 的3D立体质感和字体和样式，副标题样式也学习参考图，仅根据场景修改字体效果的颜色与场景匹配，中间的字体仍然为白色，例如春天荷花场景，标题的描边色可以以青绿色为主 [${themeColorHex}]。
+尺寸要求：主视觉尺寸为1:1。`;
+                
+                const parts = [{ text: finalPrompt }];
+                
+                // 加载画面参考图 ip.png
+                const ipImageInfo = await getLocalImageBase64('ip.png');
+                if (ipImageInfo) {
+                    parts.push({
+                        inlineData: { mimeType: ipImageInfo.mimeType, data: ipImageInfo.data }
+                    });
+                }
+
+                // 加载文字参考图 text.png
+                const textImageInfo = await getLocalImageBase64('text.png');
+                if (textImageInfo) {
+                    parts.push({
+                        inlineData: { mimeType: textImageInfo.mimeType, data: textImageInfo.data }
+                    });
+                }
+
+                const imageUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent?key=${apiKey}`;
+                
+                const imageRes = await fetch(imageUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: parts }] })
+                });
+
+                if(!imageRes.ok) {
+                    const errObj = await imageRes.json();
+                    throw new Error(errObj.error?.message || '图像生成请求失败');
+                }
+                
+                const imageData = await imageRes.json();
+                
+                let generatedBase64 = null;
+                let generatedMime = 'image/png';
+                if (imageData.candidates && imageData.candidates[0].content && imageData.candidates[0].content.parts) {
+                    for (const p of imageData.candidates[0].content.parts) {
+                        if (p.inlineData && p.inlineData.data) {
+                            generatedBase64 = p.inlineData.data;
+                            generatedMime = p.inlineData.mimeType || generatedMime;
+                            break;
+                        }
+                    }
+                }
+
+                if (!generatedBase64) {
+                    throw new Error("API 返回成功，但未能解析到图像数据 (inlineData为空)。可能有内容审核风险。");
+                }
+
+                const finalImgSrc = `data:${generatedMime};base64,${generatedBase64}`;
+
+                document.getElementById('current-header-img').src = finalImgSrc;
+                document.querySelectorAll('.poster-header').forEach(el => {
+                    el.style.backgroundImage = `url('${finalImgSrc}')`;
+                });
+                
+                statusEl.innerHTML = '<span style="color:#28a745">头图生成(含3D艺术字)并替换成功！</span>';
+
+                // ==================== 记录到历史 ====================
+                saveToHistory(finalImgSrc, userInput, headerTitle, headerSubtitle);
+
+            } catch (err) {
+                statusEl.innerHTML = `<span style="color:red">发生错误: ${err.message}</span>`;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // ================= 下载功能架构重构 =================
+        
+        function renderCanvasToBlob(cloneTarget, scaleMultiplier = 1, useSolidBg = false) {
+            return new Promise((resolve, reject) => {
+                setTimeout(() => {
+                    let bgConfig = null;
+                    if (useSolidBg) {
+                        // 强制拉取目前根节点定义的配置背景纯色
+                        bgConfig = getComputedStyle(document.documentElement).getPropertyValue('--poster-bg-color').trim();
+                    }
+                    html2canvas(cloneTarget, { scale: scaleMultiplier, useCORS: true, backgroundColor: bgConfig })
+                        .then(canvas => { canvas.toBlob(blob => resolve(blob)); })
+                        .catch(err => reject(err));
+                }, 600); 
+            });
+        }
+
+        async function prepareClone(posterOriginal, themeColor) {
+            const clone = posterOriginal.cloneNode(true);
+            clone.style.transform = 'none'; clone.style.position = 'absolute'; clone.style.top = '0'; clone.style.left = '0';
+            clone.style.width = '1080px'; clone.style.backgroundColor = getComputedStyle(document.documentElement).getPropertyValue('--poster-bg-color');
+            clone.style.overflow = 'visible';
+
+            const hSrc = document.getElementById('current-header-img').src;
+            const hH = getComputedStyle(document.documentElement).getPropertyValue('--header-h');
+            const hDiv = clone.querySelector('.poster-header');
+            hDiv.style.backgroundImage = `url('${hSrc}')`; hDiv.style.height = hH; hDiv.style.backgroundSize = 'cover'; hDiv.style.backgroundPosition = 'top center';
+
+            const displayLogo = posterOriginal.querySelector('.poster-logo-display');
+            const lSrc = (displayLogo.complete && displayLogo.naturalWidth > 0) ? displayLogo.src : document.getElementById('base-logo-data').src;
+            clone.querySelector('.poster-logo img').src = lSrc;
+
+            const originalTitleBgs = posterOriginal.querySelectorAll('.title-bg-layer img');
+            const clonedTitleBgs = clone.querySelectorAll('.title-bg-layer img');
+            clonedTitleBgs.forEach((clonedImg, index) => {
+                const origImg = originalTitleBgs[index];
+                if (origImg.complete && origImg.naturalWidth > 0) {
+                    clonedImg.style.filter = 'none'; clonedImg.classList.remove('title-tint');
+                    clonedImg.src = tintImageToBase64(origImg, themeColor);
+                }
+            });
+            return clone;
+        }
+
+        async function downloadSingle(index, nameStr) {
+            const btn = document.getElementById(`download-btn-${index}`);
+            const originalText = btn.innerText;
+            btn.innerText = '⏳ 生成中...'; btn.disabled = true;
+
+            const container = document.getElementById('cloned-poster-container');
+            container.innerHTML = '';
+            
+            const posterOriginal = document.getElementById(`poster-${index}`);
+            const themeColor = getComputedStyle(document.documentElement).getPropertyValue('--element-color').trim();
+            
+            try {
+                const clone = await prepareClone(posterOriginal, themeColor);
+                container.appendChild(clone);
+                // 这里传入参数 scale = 1.5（放大150%），以及 forceSolidBg = true（强制纯色背景）
+                const blob = await renderCanvasToBlob(clone, 1.5, true);
+                saveAs(blob, `新签海报_${nameStr}.png`);
+            } catch (err) {
+                console.error(err);
+                alert("生成失败，请重试！");
+            }
+
+            container.innerHTML = ''; 
+            btn.innerText = originalText; btn.disabled = false;
+        }
+
+        async function startDownloadAll() {
+            const btn = document.getElementById('download-btn-all'); 
+            btn.classList.add('disabled'); btn.innerText = '⏳ 批量队列排队中...'; btn.disabled = true;
+    
+            const container = document.getElementById('cloned-poster-container');
+            const posters = document.querySelectorAll('.poster');
+            const themeColor = getComputedStyle(document.documentElement).getPropertyValue('--element-color').trim();
+            const courseNames = ['48课包', '42课包', '30课包'];
+
+            for(let i = 0; i < posters.length; i++) {
+                container.innerHTML = '';
+                const clone = await prepareClone(posters[i], themeColor);
+                container.appendChild(clone);
+                const blob = await renderCanvasToBlob(clone, 1, false);
+                saveAs(blob, `新签海报_${courseNames[i]}.png`);
+            }
+
+            container.innerHTML = ''; 
+            btn.classList.remove('disabled'); btn.innerText = '⬇️ 批量下载 (全3版)'; btn.disabled = false;
+        }
+
+        window.onload = () => { 
+            setupHeaderDrag(); initView(); applyGlobalTheme('#ff4757'); setupSync(); 
+            const savedKey = localStorage.getItem('gemini_api_key');
+            if (savedKey) document.getElementById('api-key-input').value = savedKey;
+            renderHistory();
+        }; 
+    </script>
+</body>
+</html>
